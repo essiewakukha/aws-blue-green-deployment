@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Blue/Green deployment infrastructure: security groups, target groups, weighted ALB listener, CloudWatch alarms, and automated rollback (Lambda + EventBridge)'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'bluegreen-capstone'
+    Description: 'The name of the project used for resource naming (keep short - ALB/TG names cap at 32 chars)'
+  VpcId:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: 'The ID of your default or custom VPC'
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Description: 'At least two public subnet IDs (different AZs) for the ALB'
+
+Resources:
+
+  # ============================================================
+  # LAYER 1: NETWORK SECURITY
+  # ============================================================
+
+  # 1. ALB security group (allows internet HTTP traffic)
+  ALBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-alb-sg - HTTP from internet'
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-alb-sg'
+
+  # 2. App security group (allows traffic ONLY from the ALB).
+  #    Shared by Blue AND Green instances - guarantees security parity.
+  AppSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-app-sg - HTTP only from ALB'
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-app-sg'
+
+  # ============================================================
+  # LAYER 2: LOAD BALANCING (blue-green core)
+  # ============================================================
+
+  # 3. Target group Blue (current live version)
+  TargetGroupBlue:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub '${ProjectName}-tg-blue'
+      Protocol: HTTP
+      Port: 80
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: '/health'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+      Tags:
+        - Key: Environment
+          Value: blue
+
+  # 4. Target group Green (new version)
+  TargetGroupGreen:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub '${ProjectName}-tg-green'
+      Protocol: HTTP
+      Port: 80
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: '/health'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+      Tags:
+        - Key: Environment
+          Value: green
+
+  # 5. Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Sub '${ProjectName}-alb'
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets: !Ref Subnets
+
+  # 6. Production listener - WEIGHTED forward rule across both target
+  #    groups. Starts at Blue=100/Green=0. switch-traffic.sh changes
+  #    the weights at runtime via elbv2 modify-listener.
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref TargetGroupBlue
+                Weight: 100
+              - TargetGroupArn: !Ref TargetGroupGreen
+                Weight: 0
+
+  # ============================================================
+  # LAYER 3: MONITORING (CloudWatch alarms on Green)
+  # ============================================================
+  # ALB metrics need dimension values in "full name" format
+  # (app/name/id and targetgroup/name/id) - hence the GetAtt
+  # LoadBalancerFullName / TargetGroupFullName below, NOT the ARNs.
+  # TreatMissingData=notBreaching so Green idling at weight 0
+  # does not false-alarm.
+
+  # 7. Alarm: Green returning 5xx errors
+  Green5xxAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: !Sub '${ProjectName}-green-5xx-errors'
+      AlarmDescription: 'Green target group returning 5xx - triggers automated rollback'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: 'HTTPCode_Target_5XX_Count'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt ApplicationLoadBalancer.LoadBalancerFullName
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroupGreen.TargetGroupFullName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  # 8. Alarm: Green latency regression
+  GreenLatencyAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: !Sub '${ProjectName}-green-high-latency'
+      AlarmDescription: 'Green average response time above 1s - triggers automated rollback'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: 'TargetResponseTime'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt ApplicationLoadBalancer.LoadBalancerFullName
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroupGreen.TargetGroupFullName
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # 9. Alarm: Green instances failing ALB health checks
+  GreenUnhealthyHostAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: !Sub '${ProjectName}-green-unhealthy-hosts'
+      AlarmDescription: 'One or more Green targets failing health checks - triggers automated rollback'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: 'UnHealthyHostCount'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt ApplicationLoadBalancer.LoadBalancerFullName
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroupGreen.TargetGroupFullName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  # ============================================================
+  # LAYER 4: AUTOMATED ROLLBACK (alarm -> EventBridge -> Lambda)
+  # ============================================================
+
+  # 10. IAM role for the rollback Lambda
+  RollbackLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectName}-rollback-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-rollback-policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:ModifyListener'
+                  - 'elasticloadbalancing:DescribeListeners'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  # 11. Rollback Lambda - code inline, no packaging needed.
+  #     Reverts the listener to Blue=100/Green=0 when invoked.
+  RollbackLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub '${ProjectName}-auto-rollback'
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      Role: !GetAtt RollbackLambdaRole.Arn
+      Environment:
+        Variables:
+          LISTENER_ARN: !Ref ALBListener
+          TG_BLUE_ARN: !Ref TargetGroupBlue
+          TG_GREEN_ARN: !Ref TargetGroupGreen
+      Code:
+        ZipFile: |
+          import os
+          import boto3
+
+          elbv2 = boto3.client("elbv2")
+
+          def handler(event, context):
+              alarm = event.get("detail", {}).get("alarmName", "unknown")
+              state = event.get("detail", {}).get("state", {}).get("value", "unknown")
+              print(f"Triggered by alarm={alarm} state={state}")
+
+              if state != "ALARM":
+                  print("State is not ALARM - no action taken.")
+                  return {"action": "none", "alarm": alarm, "state": state}
+
+              print("Rolling back: setting Blue=100 / Green=0 ...")
+              elbv2.modify_listener(
+                  ListenerArn=os.environ["LISTENER_ARN"],
+                  DefaultActions=[{
+                      "Type": "forward",
+                      "ForwardConfig": {
+                          "TargetGroups": [
+                              {"TargetGroupArn": os.environ["TG_BLUE_ARN"], "Weight": 100},
+                              {"TargetGroupArn": os.environ["TG_GREEN_ARN"], "Weight": 0},
+                          ]
+                      },
+                  }],
+              )
+              print("ROLLBACK COMPLETE - all traffic on Blue.")
+              return {"action": "rollback", "alarm": alarm}
+
+  # 12. EventBridge rule: fires the Lambda when any Green alarm
+  #     enters ALARM state.
+  GreenAlarmRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Name: !Sub '${ProjectName}-green-alarm-rule'
+      Description: 'Invoke rollback Lambda when any Green alarm enters ALARM state'
+      EventPattern:
+        source:
+          - 'aws.cloudwatch'
+        detail-type:
+          - 'CloudWatch Alarm State Change'
+        detail:
+          alarmName:
+            - !Sub '${ProjectName}-green-5xx-errors'
+            - !Sub '${ProjectName}-green-high-latency'
+            - !Sub '${ProjectName}-green-unhealthy-hosts'
+          state:
+            value:
+              - 'ALARM'
+      State: ENABLED
+      Targets:
+        - Id: rollback-lambda
+          Arn: !GetAtt RollbackLambda.Arn
+
+  # 13. Permission for EventBridge to invoke the Lambda
+  RollbackLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref RollbackLambda
+      Action: 'lambda:InvokeFunction'
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt GreenAlarmRule.Arn
+
+Outputs:
+  AppSecurityGroupId:
+    Description: 'Security group for Blue AND Green instances (shared for parity)'
+    Value: !Ref AppSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-AppSG'
+  ListenerArn:
+    Description: 'ALB listener - target of switch-traffic.sh and rollback.sh'
+    Value: !Ref ALBListener
+    Export:
+      Name: !Sub '${AWS::StackName}-Listener'
+  TgBlueArn:
+    Description: 'Blue target group ARN'
+    Value: !Ref TargetGroupBlue
+  TgGreenArn:
+    Description: 'Green target group ARN'
+    Value: !Ref TargetGroupGreen
+  AlbDns:
+    Description: 'Public URL of the application - use for browser screenshots'
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  RollbackLambdaName:
+    Description: 'Check rollback logs with: aws logs tail /aws/lambda/<this>'
+    Value: !Ref RollbackLambda
