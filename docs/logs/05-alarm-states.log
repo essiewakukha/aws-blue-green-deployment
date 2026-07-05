@@ -1,0 +1,7 @@
+----------------------------------------------------
+|                  DescribeAlarms                  |
++--------------------------------------------+-----+
+|  bluegreen-capstone-green-5xx-errors       |  OK |
+|  bluegreen-capstone-green-high-latency     |  OK |
+|  bluegreen-capstone-green-unhealthy-hosts  |  OK |
++--------------------------------------------+-----+

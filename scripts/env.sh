@@ -27,7 +27,7 @@ export LISTENER_ARN="arn:aws:elasticloadbalancing:us-east-1:207567786898:listene
 
 # Populated by launch-env.sh (comma-separated instance IDs)
 export BLUE_INSTANCE_IDS="i-0a31987686421ae61,i-0fdd6b7681eef1386"
-export GREEN_INSTANCE_IDS="i-0f2fff4f2cc98c323,i-0350da29954d07c06"
+export GREEN_INSTANCE_IDS="i-0bccf91c3953cd632,i-039f27e896b4db52c"
 
 # Populated by auto-rollback.sh
 export ROLLBACK_LAMBDA_ARN=""

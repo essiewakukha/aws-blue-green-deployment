@@ -1,0 +1,17 @@
+----------------------------------------------------------------------------------------------
+|                                   DescribeStackResources                                   |
++---------------------------+---------------------------------------------+------------------+
+|  ALBListener              |  AWS::ElasticLoadBalancingV2::Listener      |  CREATE_COMPLETE |
+|  ALBSecurityGroup         |  AWS::EC2::SecurityGroup                    |  CREATE_COMPLETE |
+|  AppSecurityGroup         |  AWS::EC2::SecurityGroup                    |  CREATE_COMPLETE |
+|  ApplicationLoadBalancer  |  AWS::ElasticLoadBalancingV2::LoadBalancer  |  CREATE_COMPLETE |
+|  Green5xxAlarm            |  AWS::CloudWatch::Alarm                     |  CREATE_COMPLETE |
+|  GreenAlarmRule           |  AWS::Events::Rule                          |  CREATE_COMPLETE |
+|  GreenLatencyAlarm        |  AWS::CloudWatch::Alarm                     |  CREATE_COMPLETE |
+|  GreenUnhealthyHostAlarm  |  AWS::CloudWatch::Alarm                     |  CREATE_COMPLETE |
+|  RollbackLambda           |  AWS::Lambda::Function                      |  CREATE_COMPLETE |
+|  RollbackLambdaPermission |  AWS::Lambda::Permission                    |  CREATE_COMPLETE |
+|  RollbackLambdaRole       |  AWS::IAM::Role                             |  CREATE_COMPLETE |
+|  TargetGroupBlue          |  AWS::ElasticLoadBalancingV2::TargetGroup   |  CREATE_COMPLETE |
+|  TargetGroupGreen         |  AWS::ElasticLoadBalancingV2::TargetGroup   |  CREATE_COMPLETE |
++---------------------------+---------------------------------------------+------------------+

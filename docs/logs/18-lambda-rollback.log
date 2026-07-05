@@ -1,0 +1,13 @@
+2026-07-05T20:12:24.913000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd INIT_START Runtime Version: python:3.12.mainlinev2.v11	Runtime Version ARN: arn:aws:lambda:us-east-1::runtime:0eb6fb00a97c1a17d2e3014b04c79bfc9bea4301466439e3458f985dc75cadcc
+2026-07-05T20:12:25.414000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd START RequestId: d020ef33-f191-4cd1-b00a-1ba08aaabf0d Version: $LATEST
+2026-07-05T20:12:25.414000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd Triggered by alarm=bluegreen-capstone-green-unhealthy-hosts state=ALARM
+2026-07-05T20:12:25.414000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd Rolling back: setting Blue=100 / Green=0 ...
+2026-07-05T20:12:25.732000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd ROLLBACK COMPLETE - all traffic on Blue.
+2026-07-05T20:12:25.746000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd END RequestId: d020ef33-f191-4cd1-b00a-1ba08aaabf0d
+2026-07-05T20:12:25.746000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd REPORT RequestId: d020ef33-f191-4cd1-b00a-1ba08aaabf0d	Duration: 331.73 ms	Billed Duration: 829 ms	Memory Size: 128 MB	Max Memory Used: 91 MB	Init Duration: 496.85 ms
+2026-07-05T20:15:24.410000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd START RequestId: dfe04460-2c40-42a5-9e19-348d024df455 Version: $LATEST
+2026-07-05T20:15:24.410000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd Triggered by alarm=bluegreen-capstone-green-5xx-errors state=ALARM
+2026-07-05T20:15:24.410000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd Rolling back: setting Blue=100 / Green=0 ...
+2026-07-05T20:15:24.702000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd ROLLBACK COMPLETE - all traffic on Blue.
+2026-07-05T20:15:24.704000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd END RequestId: dfe04460-2c40-42a5-9e19-348d024df455
+2026-07-05T20:15:24.704000+00:00 2026/07/05/[$LATEST]a14bff31c8034d00b42c57aabb5c09bd REPORT RequestId: dfe04460-2c40-42a5-9e19-348d024df455	Duration: 293.20 ms	Billed Duration: 294 ms	Memory Size: 128 MB	Max Memory Used: 91 MB

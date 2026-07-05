@@ -1,0 +1,14 @@
+>> Setting listener weights: Blue=100  Green=0 ...
+>> Weights applied in 656 ms.
+
+>> Live listener config:
+-------------------------------------------------------------------------------------------------------------------------
+|                                                   DescribeListeners                                                   |
++----------------------------------------------------------------------------------------------------------------+------+
+|  arn:aws:elasticloadbalancing:us-east-1:207567786898:targetgroup/bluegreen-capstone-tg-blue/5abc556e2ef9ae27   |  100 |
+|  arn:aws:elasticloadbalancing:us-east-1:207567786898:targetgroup/bluegreen-capstone-tg-green/fde24a909ee4cff3  |  0   |
++----------------------------------------------------------------------------------------------------------------+------+
+
+>> Waiting 15s for listener propagation...
+>> Sampling 20 requests through the ALB:
+>> Observed: BLUE=20/20  GREEN=0/20  (expected ~100%/0%)
